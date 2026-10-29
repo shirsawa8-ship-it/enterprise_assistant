@@ -39,7 +39,6 @@ if __name__ == "__main__":
     print("工具调用：\n",result.tool_calls)
     if result.tool_calls:
         messages.append(result)
-
         tools_by_name = {
             get_expense_status.name: get_expense_status,
         }
@@ -60,7 +59,7 @@ if __name__ == "__main__":
                     tool_call_id = tool_call["id"]
                 )
             )
-            final_response = model.invoke(messages)
+        final_response = model.invoke(messages)
         print(f"最终回答：{final_response.content}")
     else:
         print(f"直接回答：{result.content}")
