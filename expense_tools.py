@@ -1,15 +1,6 @@
 from langchain_core.tools import tool
+from expense_repostitory import query_expense
 
-EXPENSE_RECORDS = {
-    "BX2026001": {
-        "amount": 800,
-        "status": "财务审核中",
-    },
-    "BX2026002": {
-        "amount": 1500,
-        "status": "待部门负责人审批",
-    },
-}
 
 @tool
 def get_expense_status(application_id : str) -> dict:
@@ -21,7 +12,7 @@ def get_expense_status(application_id : str) -> dict:
            "found": False,
            "message": "申请编号不能为空！"
             }
-    records = EXPENSE_RECORDS.get(application_id)
+    records = query_expense(application_id)
     if records is None:
        return {
            "application_id": application_id,
@@ -29,9 +20,9 @@ def get_expense_status(application_id : str) -> dict:
            "message": "未找到申请，请核对编号！"
        }
     return {
-       "application_id": application_id,
+       "application_id": records["application_id"],
        "found": True,
-       "amount": records["amount"],
+       "amount": str(records["amount"]),
        "status": records["status"],
    }
 
