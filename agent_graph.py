@@ -1,6 +1,9 @@
 from pathlib import Path
+
+from anyio.lowlevel import checkpoint
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
+from langgraph.checkpoint.memory import InMemorySaver
 
 from langchain_ollama import ChatOllama
 
@@ -56,14 +59,23 @@ builder.add_conditional_edges(
 
 builder.add_edge("tools", "assistant")
 
-graph = builder.compile()
+checkpointer = InMemorySaver()
+graph = builder.compile(checkpointer = checkpointer)
 
 if __name__ == "__main__":
-    result = graph.invoke({
-        "messages": [
-            ("human","查询BX2026001的状态和金额")
-        ]
-    })
-    print(result)
-    print(result["messages"][-1])
-    print(result["messages"][-1].content)
+    config = {
+        "configurable": {"thread_id": "local-demo-001"}
+    }
+
+    while True:
+        question = input("用户：").strip()
+        if question.upper() in {"EXIT", "QUIT", "退出"}:
+            break
+        if not question:
+            print("请输入问题")
+            continue
+        response = graph.invoke(
+            {"messages": [("human", question)]},
+            config = config,
+        )
+        print("agent：", response["messages"][-1].content)
