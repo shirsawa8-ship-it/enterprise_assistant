@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from anyio.lowlevel import checkpoint
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
