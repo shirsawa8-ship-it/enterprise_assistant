@@ -4,6 +4,8 @@ import httpx
 from dotenv import load_dotenv
 from langsmith import Client
 
+from uuid import uuid4
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
@@ -13,7 +15,10 @@ def predict(inputs: dict) -> dict:
 
     response = httpx.post(
         "http://127.0.0.1:8888/chat",
-        json={"question": question},
+        json={
+            "question": question,
+            "session_id": uuid4().hex,
+        },
         timeout=360,
     )
     response.raise_for_status()         #检查响应状态
@@ -22,8 +27,6 @@ def predict(inputs: dict) -> dict:
 
     return {
         "output": result["answer"],
-        "sources": result["sources"],
-        "docs_time": result["docs_time"],
         "invoke_time": result["invoke_time"],
     }
 
