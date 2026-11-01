@@ -40,7 +40,6 @@ def call_model(state: MessagesState)-> dict:
     response = model_with_tolls.invoke(
         [SystemMessage(content= SYSTEM_PROMPT)] + state["messages"],
     )
-    print("模型请求的工具：", response.tool_calls, flush=True)
     return {"messages": [response]}
 
 
