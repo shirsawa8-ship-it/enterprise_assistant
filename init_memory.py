@@ -14,7 +14,7 @@ def main():
         port = int(os.getenv("MYSQL_PORT", "3306")),
         user = os.getenv("MYSQL_USER"),
         password = os.environ["MYSQL_PASSWORD"],
-        database = os.environ["MYSQL_DATABASE"],
+        database = os.environ["MYSQL_MEMORY_DATABASE"],
         charset = "utf8mb4",
         autocommit = True,
         connect_timeout = 5,
