@@ -2,7 +2,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 
 from langchain_ollama import ChatOllama
 
@@ -57,23 +57,5 @@ builder.add_conditional_edges(
 
 builder.add_edge("tools", "assistant")
 
-checkpointer = InMemorySaver()
-graph = builder.compile(checkpointer = checkpointer)
-
-if __name__ == "__main__":
-    config = {
-        "configurable": {"thread_id": "local-demo-001"}
-    }
-
-    while True:
-        question = input("用户：").strip()
-        if question.upper() in {"EXIT", "QUIT", "退出"}:
-            break
-        if not question:
-            print("请输入问题")
-            continue
-        response = graph.invoke(
-            {"messages": [("human", question)]},
-            config = config,
-        )
-        print("agent：", response["messages"][-1].content)
+def build_graph(checkpointer):
+    return builder.compile(checkpointer = checkpointer)

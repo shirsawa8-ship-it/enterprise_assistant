@@ -6,20 +6,48 @@ import uvicorn
 from pydantic import BaseModel,Field
 from langsmith import traceable
 
-from agent_graph import graph
+import os
+import pymysql
+from contextlib import asynccontextmanager
+from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+from agent_graph import build_graph
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 class ChatRequest(BaseModel):
     question : str = Field(min_length=1,max_length=2000)
-    session_id: str = Field(min_length=1,max_length=32)
+    session_id: str = Field(min_length=1,max_length=64)
 
-app = FastAPI(title= "企业知识库助手")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    connection = pymysql.connect(
+        host = os.getenv("MYSQL_HOST", "127.0.0.1"),
+        port = int(os.getenv("MYSQL_PORT", 3306)),
+        user = os.environ["MYSQL_USER"],
+        password = os.environ["MYSQL_PASSWORD"],
+        database = os.environ["MYSQL_MEMORY_DATABASE"],
+        charset = "utf8mb4",
+        autocommit = True,
+        connect_timeout = 5,
+    )
+    try:
+        checkpointer = PyMySQLSaver(connection)
+        checkpointer.setup()
+
+        app.state.graph = build_graph(checkpointer)
+        yield
+
+    finally:
+        connection.close()
+
+app = FastAPI(
+    title="企业知识库助手",
+    lifespan=lifespan,
+)
 
 @app.post("/chat")
 @traceable(name= "企业知识库问答", run_type= "chain")
 def chat(request: ChatRequest):
-    print("1检索开始",flush=True)
     question = request.question.strip()
     if not question:
         raise HTTPException(
@@ -29,13 +57,13 @@ def chat(request: ChatRequest):
 
     try:
         invoke_time_start = perf_counter()
-        response = graph.invoke(
-            {"messages": [("human", request.question.strip())],},
-            config = {
-                "configurable": {
-                    "thread_id": request.session_id,
-                }
-            }
+        response = app.state.graph.invoke(
+            {"messages": [("human", request.question.strip())], },
+             config = {
+             "configurable": {
+             "thread_id": request.session_id,
+             }
+             }
         )
         invoke_time_end = perf_counter()
 
