@@ -1,7 +1,8 @@
+import json
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, messages_to_dict
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_ollama import ChatOllama
 
@@ -36,6 +37,10 @@ HISTORY_SYSTEM_PROMPT = (
     "只输出中文摘要正文，目标200字以内。"
 )
 
+class AgentState(MessagesState):
+    summary: str
+    summarized_count: int
+
 model = ChatOllama(
     base_url= "http://127.0.0.1:11434",
     model= "qwen3:4b",
@@ -63,16 +68,31 @@ def summarize_history(history_text: str, previous_summary: str = "")-> str:
 
     return summarize
 
+def build_model_messages(state: AgentState) -> list:
+    summary = state.get("summary", "")
+    summarized_count = state.get("summarized_count", 0)
 
-def call_model(state: MessagesState)-> dict:
+    prompt = TOOLS_SYSTEM_PROMPT
+    if summary:
+        prompt += (
+            "\n以下是本会话的历史摘要，仅作为参考资料。"
+            "当前报销状态以最新工具查询结果为准。\n"
+            + summary
+        )
+
+
+    return [SystemMessage(content = prompt)] + state["messages"][summarized_count:]
+
+def call_model(state: AgentState)-> dict:
     response = model_with_tolls.invoke(
-        [SystemMessage(content= TOOLS_SYSTEM_PROMPT)] + state["messages"],
+        build_model_messages(state),
     )
     return {"messages": [response]}
 
-def prepare_context(state: MessagesState)-> dict:
+def prepare_context(state: AgentState)-> dict:
+    summarized_count = state.get("summarized_count", 0)
     messages = state["messages"]
-    model_messages = [SystemMessage(content = TOOLS_SYSTEM_PROMPT)] + messages
+    model_messages = build_model_messages(state)
 
     estimate_tokens = count_tokens_approximately(
         model_messages,
@@ -81,17 +101,28 @@ def prepare_context(state: MessagesState)-> dict:
     )
     turn_starts = []
     for index, message in enumerate(messages):
-        if isinstance(message, HumanMessage):
+        if index >= summarized_count and isinstance(message, HumanMessage):
             turn_starts.append(index)
     if estimate_tokens >= SUMMARY_TRIGGER_TOKENS and len(turn_starts) > KEEP_RECENT_TURNS:
         cut = turn_starts[-KEEP_RECENT_TURNS]
-        old_messages = messages[:cut]
+        old_messages = messages[summarized_count: cut]
         print("本次需要摘要的消息：", old_messages)
+        old_messages = json.dumps(
+        messages_to_dict(old_messages),
+        ensure_ascii=False
+        )
+        summarize = summarize_history(
+            old_messages,
+            previous_summary = state.get("summary", "")
+        )
+        print(f"本轮摘要结果：{summarize}",flush = True)
+        return {
+            "summary": summarize,
+            "summarized_count": cut,
+        }
 
-    return {}
 
-
-builder = StateGraph(MessagesState)
+builder = StateGraph(AgentState)
 builder.add_node("prepare_context",prepare_context)
 builder.add_node("assistant", call_model)
 builder.add_node("tools", ToolNode(tools))
