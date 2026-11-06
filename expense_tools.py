@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from expense_repostitory import query_expense, insert_expense
+from expense_repository import query_expense, insert_expense
 from langgraph.types import interrupt
 from langgraph.prebuilt import ToolRuntime
 
