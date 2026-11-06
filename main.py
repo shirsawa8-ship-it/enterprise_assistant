@@ -11,12 +11,17 @@ import pymysql
 from contextlib import asynccontextmanager
 from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 from agent_graph import build_graph
+from langgraph.types import Command
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 class ChatRequest(BaseModel):
     question : str = Field(min_length=1,max_length=2000)
     session_id: str = Field(min_length=1,max_length=64)
+class ApprovalRequest(BaseModel):
+    session_id: str = Field(min_length=1,max_length=64)
+    approval_id: str
+    approved: bool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,17 +66,31 @@ def chat(request: ChatRequest):
             {"messages": [("human", request.question.strip())], },
              config = {
              "configurable": {
-             "thread_id": request.session_id,
-             }
+                "thread_id": request.session_id,
+                }
              }
         )
         invoke_time_end = perf_counter()
 
+        if response.get("__interrupt__"):
+            return {
+                "status": "pending_approval",
+                "session_id": request.session_id,
+                "approval_requests": [
+                    {
+                        "id": item.id,
+                        "data": item.value,
+                    }
+                    for item in response["__interrupt__"]
+                ],
+                "invoke_time": round(invoke_time_end - invoke_time_start, 2),
+            }
+
         answer = response["messages"][-1].content
         if not answer.strip():
             raise HTTPException(
-                status_code=502,
-                detail="模型未生成答案，请稍后再试"
+                status_code = 502,
+                detail = "模型未生成答案，请稍后再试"
             )
         return {
             "answer": answer,
@@ -85,6 +104,54 @@ def chat(request: ChatRequest):
             status_code = 502,
             detail = f"模型调用失败！{type(e).__name__}",
         )
+@app.post("/approval")
+def approval(request: ApprovalRequest):
+    config = {
+        "configurable": {
+            "thread_id": request.session_id,
+        }
+    }
+    snapshot = app.state.graph.get_state(config = config)
+    pending_ids = []
+    for task in snapshot.tasks:
+        for item in task.interrupts:
+            pending_ids.append(item.id)
+    if request.approval_id not in pending_ids:
+        raise HTTPException(
+            status_code = 409,
+            detail = "该会话中没有这项审核申请，请检查会话和审核编号"
+        )
+
+    response = app.state.graph.invoke(
+        Command(
+            resume = {request.approval_id: request.approved},
+        ),
+        config,
+    )
+    if response.get("__interrupt__"):
+        return {
+            "status": "pending_approval",
+            "session_id": request.session_id,
+            "approval_requests": [
+                {
+                    "id": item.id,
+                    "data": item.value
+                }for item in response["__interrupt__"]
+            ]
+        }
+    answer = response["messages"][-1].content
+    if not answer.strip():
+        raise HTTPException(
+            status_code = 502,
+            detail = "模型未生成审核结果说明！"
+        )
+    return {
+        "status": "completed",
+        "session_id": request.session_id,
+        "approved": request.approved,
+        "answer": answer,
+    }
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8888, reload=True)
