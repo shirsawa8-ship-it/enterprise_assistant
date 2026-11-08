@@ -1,3 +1,4 @@
+from os import getenv
 from langchain_ollama import OllamaEmbeddings
 from pathlib import Path
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -25,7 +26,7 @@ def main():
     chunks = split_knowledge(knowledge)
 
     embeddings = OllamaEmbeddings(
-        base_url = "http://127.0.0.1:11434",
+        base_url = getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
         model = "bge-m3",
     )
     vector_store = Chroma(

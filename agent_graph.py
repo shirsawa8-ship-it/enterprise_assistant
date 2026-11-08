@@ -1,3 +1,4 @@
+from os import getenv
 import json
 from pathlib import Path
 
@@ -60,7 +61,7 @@ class AgentState(MessagesState):
     summarized_count: int
 
 model = ChatOllama(
-    base_url = "http://127.0.0.1:11434",
+    base_url = getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
     model = "qwen3:4b",
     temperature = 0,
     num_ctx = 10240,

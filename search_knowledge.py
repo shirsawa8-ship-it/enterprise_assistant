@@ -1,3 +1,4 @@
+from os import getenv
 import pathlib
 from langsmith import traceable
 from langchain_ollama import OllamaEmbeddings
@@ -7,7 +8,7 @@ CHROMA_PATH = pathlib.Path(__file__).resolve().parent / "chroma_db"
 
 bge_m3_embeddings = OllamaEmbeddings(
     model = "bge-m3",
-    base_url = "http://127.0.0.1:11434",
+    base_url = getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
     client_kwargs = {"timeout": 40},
 )
 

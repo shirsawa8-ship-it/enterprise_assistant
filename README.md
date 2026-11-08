@@ -67,14 +67,45 @@ enterprise_assistant/
 ├── knowledge.txt           # 教学演示制度知识库
 ├── sql/
 │   ├── schema.sql          # 创建业务库和报销表
-│   └── seed.sql            # 插入演示报销记录
+│   ├── seed.sql            # 插入演示报销记录
+│   └── docker_memory.sql   # Docker 会话库与账号权限
 ├── examples/               # 数据库和工具调用的学习脚本
+├── Dockerfile              # FastAPI 镜像构建及启动方式
+├── compose.yaml            # 容器服务、网络和数据卷
+├── .env.docker.example     # Docker 配置模板
 ├── requirements.txt        # 当前环境的直接依赖版本
 ├── .env.example            # 可提交的配置模板
 └── .gitignore
 ```
 
 本地生成的 .venv、chroma_db、缓存目录和实际 .env 配置不随源码提交。examples 保留学习过程，不作为自动化测试套件或正式启动入口。
+
+## Docker Compose 启动
+
+在 Windows 上启动 Docker Desktop 和 Ollama，用 `ollama list` 确认已下载 `qwen3:4b` 和 `bge-m3`。容器通过 `host.docker.internal:11434` 访问 Windows 上的 Ollama。
+
+首次配置时，在项目根目录创建 Docker 专用配置，然后填写两个 MySQL 密码。
+
+```powershell
+Copy-Item -LiteralPath .env.docker.example -Destination .env.docker
+```
+
+使用 Compose 构建并启动服务。
+
+```powershell
+docker compose --env-file .env.docker up --build -d
+docker compose --env-file .env.docker logs -f api
+```
+
+首次启动时，MySQL 初始化演示业务库和会话库，接口容器在数据库就绪后构建知识索引。日志出现 `Application startup complete` 后，打开 [Swagger 接口文档](http://127.0.0.1:8888/docs)，按下文的接口演示操作。如果端口已被占用，可在 `.env.docker` 中修改 `API_PORT`，并用对应端口访问文档。接口绑定在本机回环地址，MySQL 在 Compose 网络内通过服务名 `mysql` 访问。
+
+MySQL 记录和检查点保存在 `mysql_data`，Chroma 索引保存在 `chroma_data`。使用以下命令停止服务，数据卷会保留。再次执行启动命令可继续使用这些数据。
+
+```powershell
+docker compose --env-file .env.docker down
+```
+
+如需在 Docker 方式下开启 LangSmith 追踪，可将下文的 `LANGSMITH_*` 配置填入 `.env.docker`。
 
 ## 本地运行
 
