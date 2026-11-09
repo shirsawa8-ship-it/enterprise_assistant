@@ -1,0 +1,51 @@
+services:
+  mysql:
+    image: mysql:8.4.13
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env.docker}
+      MYSQL_DATABASE: enterprise_assistant
+      MYSQL_USER: enterprise_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env.docker}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./sql/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql:ro
+      - ./sql/docker_memory.sql:/docker-entrypoint-initdb.d/30-memory.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP --host=127.0.0.1
+          --user="$${MYSQL_USER}" --database=enterprise_assistant_memory
+          --execute="SELECT 1 FROM enterprise_assistant.enterprise_assistant LIMIT 1" >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 24
+
+  api:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: enterprise_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env.docker}
+      MYSQL_DATABASE: enterprise_assistant
+      MYSQL_MEMORY_DATABASE: enterprise_assistant_memory
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
+      LANGSMITH_AGENT_ID: ${LANGSMITH_AGENT_ID:-enterprise-assistant}
+      LANGSMITH_AGENT_ENVIRONMENT: ${LANGSMITH_AGENT_ENVIRONMENT:-local}
+    ports:
+      - "127.0.0.1:${API_PORT:-8888}:8888"
+    volumes:
+      - chroma_data:/app/chroma_db
+
+volumes:
+  mysql_data:
+  chroma_data:
